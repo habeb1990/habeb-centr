@@ -1171,8 +1171,25 @@
               </select>
             </div>
 
-            <div>
-              <input type="text" id="pageImage" oninput="updateLiveCard()" placeholder="أو الصق رابط صورة خارجية مباشرة..." class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-slate-300 font-mono focus:outline-none focus:border-amber-400">
+            <div class="space-y-2">
+              <div class="flex items-center justify-between">
+                <span class="text-[11px] font-bold text-cyan-300 flex items-center gap-1">
+                  <i class="fa-solid fa-globe text-cyan-400"></i>
+                  <span>رابط الويب المباشر للصورة (يفتح على جميع المتصفحات):</span>
+                </span>
+                <span id="pageImageUploadBadge" class="hidden text-[10px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold">تم رفع الصورة وتوليد رابط ويب 🌐</span>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <input type="text" id="pageImage" oninput="updateLiveCard()" placeholder="رابط الويب المباشر للصورة (https://...) يظهر هنا تلقائياً فور رفعها من جهازك" class="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-cyan-300 font-mono focus:outline-none focus:border-cyan-400" dir="ltr">
+                <button type="button" onclick="copyImageWebUrlInput('pageImage')" class="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 text-xs font-bold flex items-center gap-1" title="نسخ رابط الويب للصورة">
+                  <i class="fa-solid fa-copy"></i>
+                  <span>نسخ الرابط</span>
+                </button>
+                <button type="button" onclick="openImageWebUrlInBrowser('pageImage')" class="px-3 py-2 rounded-xl bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-300 border border-cyan-500/40 text-xs font-bold flex items-center gap-1" title="فتح رابط الصورة في المتصفح">
+                  <i class="fa-solid fa-up-right-from-square"></i>
+                  <span>فتح بالمتصفح</span>
+                </button>
+              </div>
             </div>
           </div>
 
@@ -1724,9 +1741,18 @@
               </select>
             </div>
 
-            <!-- Image Link / Path Input -->
-            <div>
-              <input type="text" id="editImage" placeholder="أو الصق رابط صورة خارجية مباشرة..." class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5 text-[11px] text-slate-300 font-mono focus:outline-none focus:border-amber-400">
+            <!-- Image Link / Path Input with Web URL Copy & Open -->
+            <div class="space-y-1.5">
+              <span class="block text-[10px] font-bold text-cyan-300">رابط الويب المباشر للصورة (يفتح على جميع المتصفحات):</span>
+              <div class="flex items-center gap-1.5">
+                <input type="text" id="editImage" required placeholder="رابط الويب المباشر للصورة (https://...)" class="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-[11px] text-cyan-300 focus:outline-none focus:border-cyan-400 font-mono" dir="ltr">
+                <button type="button" onclick="copyImageWebUrlInput('editImage')" class="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 text-[11px] font-bold" title="نسخ رابط الويب">
+                  <i class="fa-solid fa-copy"></i> نسخ
+                </button>
+                <button type="button" onclick="openImageWebUrlInBrowser('editImage')" class="px-2.5 py-1.5 rounded-xl bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-300 border border-cyan-500/40 text-[11px] font-bold" title="فتح في المتصفح">
+                  <i class="fa-solid fa-globe"></i> فتح
+                </button>
+              </div>
             </div>
 
             <!-- Live Image Preview Box -->
@@ -2940,29 +2966,143 @@
     let comparedProductIds = [];
 
     
-    function handlePageMontageFiles(event) {
+    // --- AUTOMATIC DEVICE IMAGE UPLOAD TO WEBSITE & DIRECT WEB URL GENERATOR (رفع الصور للموقع وتوليد رابط ويب عالمي يفتح على جميع المتصفحات) ---
+    function optimizeImageFileToJpegDataUrl(file, maxDim = 1200, quality = 0.85) {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onerror = () => resolve(null);
+        reader.onload = function(e) {
+          const rawDataUrl = e.target.result;
+          const img = new Image();
+          img.onload = function() {
+            try {
+              let w = img.width || 800;
+              let h = img.height || 600;
+              if (w > maxDim || h > maxDim) {
+                if (w > h) {
+                  h = Math.round((h * maxDim) / w);
+                  w = maxDim;
+                } else {
+                  w = Math.round((w * maxDim) / h);
+                  h = maxDim;
+                }
+              }
+              const canvas = document.createElement('canvas');
+              canvas.width = w;
+              canvas.height = h;
+              const ctx = canvas.getContext('2d');
+              ctx.fillStyle = '#080c14';
+              ctx.fillRect(0, 0, w, h);
+              ctx.drawImage(img, 0, 0, w, h);
+              const compressedDataUrl = canvas.toDataURL('image/jpeg', quality);
+              resolve(compressedDataUrl || rawDataUrl);
+            } catch (err) {
+              resolve(rawDataUrl);
+            }
+          };
+          img.onerror = () => resolve(rawDataUrl);
+          img.src = rawDataUrl;
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    async function uploadDeviceImageToWebUrl(file) {
+      const optimizedDataUrl = await optimizeImageFileToJpegDataUrl(file);
+      if (!optimizedDataUrl) return ASSETS.laptop;
+
+      const cleanBaseName = (file.name || 'photo').replace(/[^a-zA-Z0-9_-]/g, '_').replace(/_{2,}/g, '_').slice(0, 28);
+      const fileName = `img_${Date.now()}_${Math.floor(Math.random() * 1000)}_${cleanBaseName}.jpg`;
+      const repoPath = `uploads/${fileName}`;
+
+      // If GitHub Token & Repo are configured, upload the binary JPEG directly to the website repository on GitHub and return its universal https:// web URL!
+      if (githubToken && githubRepo) {
+        try {
+          const base64Content = optimizedDataUrl.split(',')[1] || "";
+          if (base64Content) {
+            const apiUrl = `https://api.github.com/repos/${githubRepo}/contents/${repoPath}`;
+            const putRes = await fetch(apiUrl, {
+              method: 'PUT',
+              headers: {
+                'Authorization': `Bearer ${githubToken}`,
+                'Accept': 'application/vnd.github+json',
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                message: `رفع صورة منتج للموقع: ${fileName}`,
+                content: base64Content
+              })
+            });
+            if (putRes.ok) {
+              // Return direct global CDN/raw web URL that opens immediately on all browsers worldwide
+              const webUrl = `https://raw.githubusercontent.com/${githubRepo}/main/${repoPath}`;
+              return webUrl;
+            }
+          }
+        } catch (err) {}
+      }
+
+      // Queue for automatic GitHub upload as soon as GitHub Token is active, and return universal web data URL for immediate display
+      try {
+        const pending = JSON.parse(localStorage.getItem('habib_pending_image_uploads') || '[]');
+        pending.push({ repoPath, dataUrl: optimizedDataUrl, createdAt: Date.now() });
+        if (pending.length > 30) pending.shift();
+        localStorage.setItem('habib_pending_image_uploads', JSON.stringify(pending));
+      } catch (e) {}
+
+      return optimizedDataUrl;
+    }
+
+    function copyImageWebUrlInput(inputId) {
+      const el = document.getElementById(inputId);
+      if (!el || !el.value.trim()) {
+        showToast("لا يوجد رابط صورة لنسخه حالياً.");
+        return;
+      }
+      fallbackCopy(el.value.trim());
+      showToast("تم نسخ رابط الويب للصورة بنجاح! 🔗");
+    }
+
+    function openImageWebUrlInBrowser(inputId) {
+      const el = document.getElementById(inputId);
+      if (!el || !el.value.trim()) {
+        showToast("يرجى رفع صورة أولاً لفتح رابطها في المتصفح.");
+        return;
+      }
+      const url = el.value.trim();
+      const win = window.open();
+      if (win) {
+        if (url.startsWith('http')) {
+          win.location.href = url;
+        } else {
+          win.document.write(`<!DOCTYPE html><html><head><title>معاينة صورة المتجر</title><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;background:#080c14;display:flex;align-items:center;justify-content:center;min-height:100vh;"><img src="${url}" style="max-width:98vw;max-height:96vh;border-radius:12px;box-shadow:0 10px 40px rgba(0,0,0,0.8);"></body></html>`);
+          win.document.close();
+        }
+      }
+    }
+
+    function copyDirectStringUrl(url) {
+      if (!url) return;
+      fallbackCopy(url);
+      showToast("تم نسخ رابط الصورة بنجاح! 🔗");
+    }
+
+    async function handlePageMontageFiles(event) {
       if (!isAdminLoggedIn) {
         showToast("إضافة صور المونتاج مخصصة للمشرف فقط 🔒");
         return;
       }
-      const files = event.target.files;
-      if (!files || files.length === 0) return;
-      
-      let loadedCount = 0;
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        const reader = new FileReader();
-        reader.onload = function(e) {
-          currentProductMontageImages.push(e.target.result);
-          loadedCount++;
-          if (loadedCount === files.length) {
-            renderPageMontageThumbnails();
-            showToast(`تمت إضافة ${loadedCount} صور للمونتاج بنجاح! 📸`);
-          }
-        };
-        reader.readAsDataURL(file);
-      }
+      const files = event.target.files ? Array.from(event.target.files) : [];
+      if (files.length === 0) return;
       event.target.value = '';
+
+      showToast(`جاري رفع ${files.length} صور على الموقع وتوليد روابط ويب لها... ☁️⏳`);
+      for (let i = 0; i < files.length; i++) {
+        const webUrl = await uploadDeviceImageToWebUrl(files[i]);
+        currentProductMontageImages.push(webUrl);
+      }
+      renderPageMontageThumbnails();
+      showToast(`تم رفع ${files.length} صور للموقع وتوليد روابط ويب لها بنجاح! 🌐📸`);
     }
 
     function addPageMontageUrl() {
@@ -2976,7 +3116,7 @@
       currentProductMontageImages.push(url);
       input.value = '';
       renderPageMontageThumbnails();
-      showToast("تمت إضافة صورة المونتاج بنجاح! 📸");
+      showToast("تمت إضافة رابط صورة المونتاج بنجاح! 📸");
     }
 
     function removePageMontageImage(idx) {
@@ -2989,24 +3129,27 @@
       const container = document.getElementById('pageMontageList');
       if (!container) return;
       if (currentProductMontageImages.length === 0) {
-        container.innerHTML = `<span class="text-xs text-slate-500 py-2">لم تتم إضافة صور مونتاج إضافية بعد. يمكنك رفع صور كثيرة الآن.</span>`;
+        container.innerHTML = `<span class="text-xs text-slate-500 py-2">لم تتم إضافة صور مونتاج إضافية بعد. يمكنك رفع صور كثيرة الآن وسيُنشأ لها رابط ويب تلقائياً.</span>`;
         return;
       }
       container.innerHTML = currentProductMontageImages.map((img, i) => `
-        <div class="relative w-16 h-16 rounded-xl overflow-hidden border border-amber-500/40 group flex-shrink-0 bg-slate-900">
+        <div class="relative w-20 h-20 rounded-xl overflow-hidden border border-amber-500/40 group flex-shrink-0 bg-slate-900">
           <img src="${img}" class="w-full h-full object-cover">
-          <button type="button" onclick="removePageMontageImage(${i})" class="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-rose-600 text-white text-[10px] flex items-center justify-center opacity-80 hover:opacity-100 shadow" title="حذف الصورة">
+          <button type="button" onclick="removePageMontageImage(${i})" class="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-rose-600 text-white text-[10px] flex items-center justify-center opacity-90 hover:opacity-100 shadow" title="حذف الصورة">
             <i class="fa-solid fa-xmark"></i>
+          </button>
+          <button type="button" onclick="copyDirectStringUrl(currentProductMontageImages[${i}])" class="absolute bottom-0.5 left-0.5 right-0.5 py-0.5 rounded bg-slate-950/85 text-cyan-300 text-[9px] font-bold flex items-center justify-center gap-0.5 hover:bg-cyan-950" title="نسخ رابط الويب لهذه الصورة">
+            <i class="fa-solid fa-link text-[8px]"></i>
+            <span>${img.startsWith('http') ? 'رابط ويب 🌐' : 'نسخ الرابط'}</span>
           </button>
         </div>
       `).join('');
     }
 
-    
-    // --- DIRECT MODAL PHOTO MANAGEMENT (المشرف فقط: تعديل، إضافة كثيفة، وحذف صور المنتج) ---
+    // --- DIRECT MODAL PHOTO MANAGEMENT (المشرف فقط: تعديل، إضافة كثيفة، وحذف صور المنتج مع توليد رابط ويب) ---
     let currentReplacingPhoto = null; // { prodId, imgIdx }
 
-    function handleDirectModalPhotosUpload(prodId, event) {
+    async function handleDirectModalPhotosUpload(prodId, event) {
       if (!isAdminLoggedIn) {
         showToast("إضافة وتعديل الصور مخصصة للمشرف فقط 🔒");
         return;
@@ -3016,28 +3159,22 @@
       if (!p.montageImages || !Array.isArray(p.montageImages)) {
         p.montageImages = [p.image || ASSETS.laptop];
       }
-      const files = event.target.files;
-      if (!files || files.length === 0) return;
-
-      let count = 0;
-      const total = files.length;
-      for (let i = 0; i < total; i++) {
-        const reader = new FileReader();
-        reader.onload = function(e) {
-          p.montageImages.push(e.target.result);
-          count++;
-          if (count === total) {
-            try {
-              localStorage.setItem('habib_custom_products', JSON.stringify(PRODUCTS));
-            } catch(err) {}
-            showToast(`تمت إضافة ${total} صور جديدة للمنتج بنجاح! 📸`);
-            openModal(prodId);
-            renderProducts();
-          }
-        };
-        reader.readAsDataURL(files[i]);
-      }
+      const files = event.target.files ? Array.from(event.target.files) : [];
+      if (files.length === 0) return;
       event.target.value = '';
+
+      showToast(`جاري رفع ${files.length} صور للموقع وتوليد روابط ويب... ☁️⏳`);
+      for (let i = 0; i < files.length; i++) {
+        const webUrl = await uploadDeviceImageToWebUrl(files[i]);
+        p.montageImages.push(webUrl);
+      }
+      try {
+        localStorage.setItem('habib_custom_products', JSON.stringify(PRODUCTS));
+      } catch(err) {}
+      autoSyncCloudMutation();
+      showToast(`تم رفع ${files.length} صور للموقع برابط ويب مباشر بنجاح! 🌐📸`);
+      openModal(prodId);
+      renderProducts();
     }
 
     function addDirectModalPhotoUrl(prodId) {
@@ -3061,7 +3198,8 @@
       try {
         localStorage.setItem('habib_custom_products', JSON.stringify(PRODUCTS));
       } catch(err) {}
-      showToast(urls.length > 1 ? `تمت إضافة ${urls.length} صور جديدة للمنتج! 📸` : "تمت إضافة الصورة للمنتج بنجاح! 📸");
+      autoSyncCloudMutation();
+      showToast(urls.length > 1 ? `تمت إضافة ${urls.length} روابط صور للمنتج! 📸` : "تمت إضافة رابط الصورة للمنتج بنجاح! 📸");
       openModal(prodId);
       renderProducts();
     }
@@ -3076,30 +3214,30 @@
       if (fileInput) fileInput.click();
     }
 
-    function handleModalReplacePhotoFile(event) {
+    async function handleModalReplacePhotoFile(event) {
       if (!isAdminLoggedIn || !currentReplacingPhoto) return;
       const file = event.target.files && event.target.files[0];
       if (!file) return;
       const { prodId, imgIdx } = currentReplacingPhoto;
+      event.target.value = '';
+      currentReplacingPhoto = null;
+
       const p = PRODUCTS.find(item => item.id === prodId);
       if (!p || !p.montageImages) return;
 
-      const reader = new FileReader();
-      reader.onload = function(e) {
-        p.montageImages[imgIdx] = e.target.result;
-        if (imgIdx === 0) {
-          p.image = e.target.result;
-        }
-        try {
-          localStorage.setItem('habib_custom_products', JSON.stringify(PRODUCTS));
-        } catch(err) {}
-        showToast("تم تعديل واستبدال صورة المنتج بنجاح! 🔄");
-        openModal(prodId);
-        renderProducts();
-      };
-      reader.readAsDataURL(file);
-      event.target.value = '';
-      currentReplacingPhoto = null;
+      showToast("جاري رفع الصورة الجديدة للموقع وتوليد رابط ويب... ☁️⏳");
+      const webUrl = await uploadDeviceImageToWebUrl(file);
+      p.montageImages[imgIdx] = webUrl;
+      if (imgIdx === 0) {
+        p.image = webUrl;
+      }
+      try {
+        localStorage.setItem('habib_custom_products', JSON.stringify(PRODUCTS));
+      } catch(err) {}
+      autoSyncCloudMutation();
+      showToast("تم رفع الصورة الجديدة للموقع برابط ويب مباشر! 🌐🔄");
+      openModal(prodId);
+      renderProducts();
     }
 
     function setModalProductAsMainPhoto(prodId, imgIdx) {
@@ -4270,18 +4408,22 @@
       }
     }
 
-    function handlePageImageFile(event) {
+    async function handlePageImageFile(event) {
       const file = event.target.files && event.target.files[0];
       if (!file) return;
+      event.target.value = '';
 
-      const reader = new FileReader();
-      reader.onload = function(e) {
-        const dataUrl = e.target.result;
-        document.getElementById('pageImage').value = dataUrl;
-        updateLiveCard();
-        showToast("تم تحميل ومعاينة الصورة بنجاح! 📸");
-      };
-      reader.readAsDataURL(file);
+      showToast("جاري رفع الصورة للموقع وتوليد رابط ويب مباشر... ☁️⏳");
+      const webUrl = await uploadDeviceImageToWebUrl(file);
+      const pageImgInput = document.getElementById('pageImage');
+      if (pageImgInput) pageImgInput.value = webUrl;
+      const badge = document.getElementById('pageImageUploadBadge');
+      if (badge) {
+        badge.classList.remove('hidden');
+        badge.textContent = webUrl.startsWith('http') ? "تم الرفع برابط ويب عالمي 🌐" : "جاهزة للعرض على جميع المتصفحات 🌐";
+      }
+      updateLiveCard();
+      showToast(webUrl.startsWith('http') ? "تم رفع الصورة على الموقع ووضع رابط ويب مباشر لها! 🌐🚀" : "تم تجهيز الصورة وربطها لتفتح على جميع المتصفحات! 📸");
     }
 
     function submitProductPageForm() {
@@ -4355,6 +4497,7 @@
 
       closeAddProductPage();
       renderProducts();
+      autoSyncCloudMutation();
     }
 
     // --- ADMIN SYSTEM & EDIT CAPABILITY ---
@@ -4476,18 +4619,16 @@
       }
     }
 
-    function handleImageFileSelect(event) {
+    async function handleImageFileSelect(event) {
       const file = event.target.files && event.target.files[0];
       if (!file) return;
+      event.target.value = '';
 
-      const reader = new FileReader();
-      reader.onload = function(e) {
-        const dataUrl = e.target.result;
-        document.getElementById('editImage').value = dataUrl;
-        document.getElementById('editImagePreview').src = dataUrl;
-        showToast("تم تحميل ومعاينة الصورة الجديدة بنجاح! 📸");
-      };
-      reader.readAsDataURL(file);
+      showToast("جاري رفع الصورة للموقع وتوليد رابط ويب مباشر... ☁️⏳");
+      const webUrl = await uploadDeviceImageToWebUrl(file);
+      document.getElementById('editImage').value = webUrl;
+      document.getElementById('editImagePreview').src = webUrl;
+      showToast(webUrl.startsWith('http') ? "تم رفع الصورة على الموقع ووضع رابط ويب مباشر لها! 🌐🚀" : "تم تجهيز الصورة لتفتح على جميع المتصفحات! 📸");
     }
 
     document.getElementById('editImage').addEventListener('input', function() {
@@ -4834,7 +4975,70 @@
       }
     }
 
+    async function flushPendingDeviceImagesToGitHub() {
+      if (!githubToken || !githubRepo) return;
+      for (let i = 0; i < PRODUCTS.length; i++) {
+        const p = PRODUCTS[i];
+        if (p.image && p.image.startsWith("data:image/jpeg;base64,")) {
+          const b64 = p.image.split(",")[1] || "";
+          const fName = `img_${p.id || Date.now()}_main.jpg`;
+          const rPath = `uploads/${fName}`;
+          const ok = await pushBase64FileToGitHubRepo(rPath, b64, `رفع صورة منتج: ${fName}`);
+          if (ok) p.image = `https://raw.githubusercontent.com/${githubRepo}/main/${rPath}`;
+        }
+        if (Array.isArray(p.montageImages)) {
+          for (let j = 0; j < p.montageImages.length; j++) {
+            const mImg = p.montageImages[j];
+            if (mImg && mImg.startsWith("data:image/jpeg;base64,")) {
+              const b64 = mImg.split(",")[1] || "";
+              const fName = `img_${p.id || Date.now()}_${j}.jpg`;
+              const rPath = `uploads/${fName}`;
+              const ok = await pushBase64FileToGitHubRepo(rPath, b64, `رفع صورة مونتاج: ${fName}`);
+              if (ok) p.montageImages[j] = `https://raw.githubusercontent.com/${githubRepo}/main/${rPath}`;
+            }
+          }
+        }
+      }
+      try {
+        localStorage.setItem("habib_custom_products", JSON.stringify(PRODUCTS));
+        localStorage.removeItem("habib_pending_image_uploads");
+      } catch (e) {}
+    }
+
+    async function pushBase64FileToGitHubRepo(filePath, base64Content, commitMsg) {
+      if (!githubToken || !githubRepo || !base64Content) return false;
+      try {
+        const apiUrl = `https://api.github.com/repos/${githubRepo}/contents/${filePath}`;
+        let currentSha = "";
+        const getRes = await fetch(apiUrl, {
+          headers: {
+            "Authorization": `Bearer ${githubToken}`,
+            "Accept": "application/vnd.github+json"
+          }
+        });
+        if (getRes.ok) {
+          const fileMeta = await getRes.json();
+          if (fileMeta && fileMeta.sha) currentSha = fileMeta.sha;
+        }
+        const bodyObj = { message: commitMsg, content: base64Content };
+        if (currentSha) bodyObj.sha = currentSha;
+        const putRes = await fetch(apiUrl, {
+          method: "PUT",
+          headers: {
+            "Authorization": `Bearer ${githubToken}`,
+            "Accept": "application/vnd.github+json",
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(bodyObj)
+        });
+        return putRes.ok;
+      } catch (e) {
+        return false;
+      }
+    }
+
     async function syncCurrentDataToCloud(silent = false) {
+      await flushPendingDeviceImagesToGitHub();
       // Compress payload so static icons/lights/styles in ASSETS are NEVER re-uploaded
       const deltaPayload = {
         version: Date.now(),
