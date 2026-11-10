@@ -1289,6 +1289,12 @@ if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
         <span id="adminZipDownloadBtnLabel">تنزيل بصيغة ZIP 📦</span>
       </button>
 
+      <!-- 2. زر النشر والتحديث التلقائي المباشر على GitHub -->
+      <button type="button" id="adminPublishToGitHubBtn" onclick="publishStoreDirectlyToGitHub()" oncontextmenu="event.preventDefault(); promptForGitHubTokenUpdate();" class="bg-slate-950 hover:bg-slate-900 text-emerald-400 border border-emerald-500/80 px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 shadow-md hover:scale-105 active:scale-95" title="نشر وتحديث المتجر تلقائياً عبر GitHub إلى Cloudflare Pages (زر أيمن لتعديل رمز Token)">
+        <i class="fa-brands fa-github text-emerald-400 text-sm"></i>
+        <span>نشر وتحديث تلقائي لـ GitHub ⚡🚀</span>
+      </button>
+
       <!-- 2. زر فتح صفحة Cloudflare Pages للرفع المباشر -->
       <button type="button" onclick="openCloudflarePagesWindow()" class="bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 hover:from-amber-400 text-slate-950 px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 shadow-lg border border-amber-300 hover:scale-105 active:scale-95" title="فتح صفحة رفع التحديثات المباشرة لمشروع habeb-center في Cloudflare Pages فوراً">
         <i class="fa-solid fa-cloud-arrow-up text-slate-950 text-sm"></i>
@@ -5273,7 +5279,7 @@ if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
           <i class="fa-regular fa-copy text-xs"></i> 0982890723
         </button>
         <span>•</span>
-        <span>سوريا - حمص</span>
+        <span>سوريا - حمص - القصير</span>
       </div>
       <p>© 2026 مركز الحبيب (Al-Habib Center). جميع الحقوق محفوظة.</p>
     </div>
@@ -7227,6 +7233,20 @@ if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
     let dragStartDegree = 0;
     let dragStartPitch = 0;
 
+    function update3DTransformView() {
+      const img = document.getElementById('modalAngleMainImage');
+      if (!img) return;
+      img.style.transform = `scale(${currentZoomScale}) rotateY(${currentOrbitDegree}deg) rotateX(${-currentOrbitPitch}deg)`;
+    }
+
+    function stopAutoRotate() {
+      isAutoRotating = false;
+      if (autoRotateInterval) {
+        clearInterval(autoRotateInterval);
+        autoRotateInterval = null;
+      }
+    }
+
     
     
     // --- COMPREHENSIVE PRODUCT MEDIA SYSTEM (فيديو / صوت / روابط خارجية / رفع مباشر) ---
@@ -7923,8 +7943,7 @@ if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
       }
     }
 
-    async 
-    function handlePageMediaFile(event, type) {
+    async function handlePageMediaFile(event, type) {
       const file = event.target.files && event.target.files[0];
       if (!file) return;
       event.target.value = '';
@@ -8624,8 +8643,16 @@ if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
 
     
     function promptForGitHubTokenUpdate() {
-      openCloudflarePagesWindow();
-      showToast("💡 تم فتح Cloudflare Pages، ويمكنك سحب ملف ZIP وتحديث موقعك فوراً بأسرع طريقة! ⚡🚀");
+      const current = localStorage.getItem('habib_github_token') || '';
+      const newToken = prompt("أدخل رمز GitHub Personal Access Token الجديد (مع صلاحية repo):\nإذا لم تكن متأكداً، اضغط إلغاء للرفع اليدوي لحزمة ZIP عبر Cloudflare:", current);
+      if (newToken && newToken.trim()) {
+        try { localStorage.setItem('habib_github_token', newToken.trim()); } catch(e) {}
+        showToast("تم حفظ رمز GitHub Token الجديد بنجاح! جاري إعادة محاولة النشر... 🔑⚡");
+        publishStoreDirectlyToGitHub();
+      } else {
+        openCloudflarePagesWindow();
+        showToast("💡 تم فتح Cloudflare Pages، ويمكنك سحب ملف ZIP وتحديث موقعك فوراً بأسرع طريقة! ⚡🚀");
+      }
     }
 
     async function publishStoreDirectlyToGitHub() {
